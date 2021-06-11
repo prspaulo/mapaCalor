@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<title>Create a heatmap layer</title>
+	<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+	<link rel="stylesheet" href="css/foundation.css"/>
+	<script src="https://api.mapbox.com/mapbox-gl-js/v1.7.0/mapbox-gl.js"></script>
+	<link href="https://api.mapbox.com/mapbox-gl-js/v1.7.0/mapbox-gl.css" rel="stylesheet" />
+	<script src='https://api.mapbox.com/mapbox-gl-js/v1.3.2/mapbox-gl.js'></script>
+	<link href='https://api.mapbox.com/mapbox-gl-js/v1.3.2/mapbox-gl.css' rel='stylesheet'/>
+	<script type="text/javascript" src="http://ajax.aspnetcdn.com/ajax/jQuery/jquery-1.7.1.min.js"></script>
+	<script type="text/javascript" src="http://ajax.aspnetcdn.com/ajax/jquery.validate/1.9/jquery.validate.min.js"></script>
+	<!-- <script src="https://www.gstatic.com/firebasejs/7.1.0/firebase-app.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/7.1.0/firebase-database.js"></script> -->
+	<script src="https://www.gstatic.com/firebasejs/7.2.3/firebase-app.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/7.2.3/firebase-firestore.js"></script>
+
+	<style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Helvetica Neue', Helvetica, Arial, Sans-serif;
+      }
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+      h1 {
+        font-size: 20px;
+        line-height: 30px;
+      }
+      h2 {
+        font-size: 14px;
+        line-height: 20px;
+        margin-bottom: 10px;
+      }
+      a {
+        text-decoration: none;
+        color: #2dc4b2;
+      }
+      
+      #console {
+        position: absolute;
+        margin: 20px;
+        width: 240px;
+        background-color: white;
+        padding: 10px 10px;
+      }
+      
+      .session {
+        margin-bottom: 80px;
+      }
+
+      .row {
+        height: 12px;
+        width: 100%;
+      }
+
+      .colors {
+        background: linear-gradient(
+          to right,
+          #0000FF,
+          #4169e1,
+          #00FFFF,
+          #bfff00,
+          #ffff00,
+          #FF0000
+        );
+        margin-bottom: 5px;
+      }
+
+      .label {
+        width: 15%;
+        display: inline-block;
+        text-align: center;
+      }
+    </style>
+</head>
+<body>
+	<div id="map"></div>
+	<div id="console">
+      <h1>Service demands</h1>
+      <p>
+        Demand met by public health services of Belo Horizonte in 2020.
+      </p>
+      <div class="session">
+        <h2>Demands</h2>
+        <div class="row colors"></div>
+        <div class="row labels">
+          <div class="label">0</div>
+          <div class="label">1</div>
+          <div class="label">2</div>
+          <div class="label">3</div>
+          <div class="label">4</div>
+          <div class="label">5+</div>
+        </div>
+      </div>
+      
+	<input id="check_data" name="check_data" type="checkbox"><label>Filter by date and hour</label>
+
+	<div class="" id="filters_date_hour" disabled>		
+      <div class="" id="filtro_data">
+      	<form>
+			<h2>Date</h2>
+			<input type="date" id="data" name="data_atendimento">
+		</form>
+      </div>
+
+      <div class="session_hora" id="filtro_hora">
+        <h2>Hour: <label id="active-hour">14h</label></h2>
+        <input id="slider" class="row" type="range" min="0" max="23">
+      </div>
+      </div>
+
+      <br>
+      <br>
+        <div class="" id="filters">
+          <p>Type of services.</p>
+          <input id="all" type="radio" name="toggle" value="all" checked="checked">
+          <label for="all">All the services</label>
+          <br>
+          <input id="upas" type="radio" name="toggle" value="upa">
+          <label for="upas">Upas</label>
+          <br>
+          <input id="hospitais" type="radio" name="toggle" value="hospital">
+          <label for="hospitais">Hospitals</label>
+          <br>
+          <input id="urgencias" type="radio" name="toggle" value="urgencia">
+          <label for="urgencias">Urgency (Hospital/UPA)</label>
+          <br>
+        </div>
+
+      <br>
+      <br>
+        <div class="" id="filters_reg">
+          <p>Region of symptoms.</p>
+          <input id="cabeca" name="check_cabeca" type="checkbox" value="Cabeça">
+          <label>Head</label>
+          <br>
+          <input id="torax" name="check_torax" type="checkbox" value="Tórax">
+          <label>Chest</label>
+          <br>
+          <input id="barriga" name="check_barriga" type="checkbox" value="Barriga">
+          <label>Belly</label>
+          <br>
+          <input id="costasmembros" name="membros_torax" type="checkbox" value="CostasMembros">
+          <label>Back and limbs</label>
+          <br>
+        </div>
+    </div>
+
+	<script>
+		var db;
+		var firebaseConfig = {
+			"SUA CONFIGURAÇÃO DO FIREBASE"
+		};
+  // Initialize Firebase
+  //firebase.initializeApp(firebaseConfig);
+  var app = firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore(app);
+/*********************************************************************************************/
+/*********************************************************************************************/
+  mapboxgl.accessToken = '"SUA CHAVE DO MAPBOX"';
+  var map = new mapboxgl.Map({
+  	container: 'map',
+  	style: 'mapbox://styles/mapbox/streets-v11',
+  	center: [-43.975915, -19.871367], 
+  	zoom: 11
+  });
+/**************************************************************************************************/
+/***************************FILTRO POR SERVICÇO****************************************************/
+  document.getElementById('filters').addEventListener('change', function(e) {
+  var servico = e.target.value;
+  // update the map filter                    NÃO É NESSE SEU BURRO
+  if($('#check_data').is(':checked')){
+  	if (servico === 'all') {
+	    filterservico = ['!=', ['string', ['get', 'tipo_servico']], 'placeholder'];
+	  } else if (servico === 'posto') {
+	    filterservico = ['match', ['get', 'tipo_servico'], [servico], true, false];
+	  } else if (servico === 'upa') {
+	    filterservico = ['match', ['get', 'tipo_servico'], [servico], true, false];
+	  } else if (servico === 'hospital') {
+	    filterservico = ['match', ['get', 'tipo_servico'], [servico], true, false];
+	  } else if (servico === 'urgencia'){
+	    filterservico = ['match', ['get', 'tipo_servico'], [servico], true, false];
+	  } else{
+	  	alert("Não existe demandas");
+	}
+	map.setFilter('heat-points', ['all', filterservico, filterHour, filterData]);
+	map.setFilter('points', ['all', filterservico, filterHour, filterData]);
+  }
+  else{
+  	if (servico === 'all') {
+	    filterservico = ['!=', ['string', ['get', 'tipo_servico']], 'placeholder'];
+	  } else if (servico === 'posto') {
+	    filterservico = ['match', ['get', 'tipo_servico'], [servico], true, false];
+	  } else if (servico === 'upa') {
+	    filterservico = ['match', ['get', 'tipo_servico'], [servico], true, false];
+	  } else if (servico === 'hospital') {
+	    filterservico = ['match', ['get', 'tipo_servico'], [servico], true, false];
+	  } else if (servico === 'urgencia'){
+	    filterservico = ['match', ['get', 'tipo_servico'], [servico], true, false];
+	  } else{
+	  	alert("Não existe demandas");
+	  }
+	  map.setFilter('heat-points', ['all', filterservico]);
+	  map.setFilter('points', ['all', filterservico]);
+ }
+
+});
+/**************************************************************************************************/
+/**************************************************************************************************/
+/***************************FILTRO POR REGIÃO DOS SINTOMAS*****************************************/
+	var regiao
+	$('#cabeca').click(function(e){
+		if($('#cabeca').is(':checked')){
+			regiao = e.target.value;
+			filtercabeca = ['match', ['get', 'regiao_sintoma'], [regiao], true, false];
+			map.setFilter('heat-points', ['all', filterservico, filtercabeca]);
+			map.setFilter('points', ['all', filterservico, filtercabeca]);
+		}
+	});
+	$('#torax').click(function(e){
+		if($('#torax').is(':checked')){
+			regiao = e.target.value;
+			filtertorax = ['match', ['get', 'regiao_sintoma'], [regiao], true, false];
+			map.setFilter('heat-points', ['all', filterservico, filtertorax]);
+			map.setFilter('points', ['all', filterservico, filtertorax]);
+		}
+	});
+	$('#barriga').click(function(e){
+		if($('#barriga').is(':checked')){
+			regiao = e.target.value;
+			filterregiao = ['match', ['get', 'regiao_sintoma'], [regiao], true, false];
+			map.setFilter('heat-points', ['all', filterservico, filterregiao]);
+			map.setFilter('points', ['all', filterservico, filterregiao]);
+		}
+	});
+	$('#costasmembros').click(function(e){
+		if($('#costasmembros').is(':checked')){
+			regiao = e.target.value;
+			alert(regiao)
+			filterregiao = ['match', ['get', 'regiao_sintoma'], [regiao], true, false];
+			map.setFilter('heat-points', ['all', filterservico, filterregiao]);
+			map.setFilter('points', ['all', filterservico, filterregiao]);
+		}
+	});
+/**************************************************************************************************/
+/***************************FILTRO POR HORÁRIO*****************************************************/
+	$('#check_data').click(function(e){
+		if($('#check_data').is(':checked')){
+			$('#filters_date_hour').css("display", "block");
+		}
+		else{
+			$('#filters_date_hour').css("display", "none");	
+		}
+	});	
+/**************************************************************************************************/
+/***************************FILTRO POR HORÁRIO*****************************************************/
+  	document
+          .getElementById('slider')
+          .addEventListener('input', function(e) {
+          	if($('#data').val() != ""){
+	          	var data = $('#data').val();
+	            var hour = parseInt(e.target.value);
+	            // update the map
+	            filterHour = ['==', ['number', ['get', 'hora']], hour];
+	            filterData = ['==', ['string', ['get', 'data_direcionamento']], data];
+
+	            map.setFilter('heat-points', ['all', filterservico, filterHour, filterData]);
+	            map.setFilter('points', ['all', filterservico, filterHour, filterData]);
+	            
+            document.getElementById('active-hour').innerText = hour + "h";
+          	}
+          	else{
+          		alert("Você precisa escolher uma data");
+          	}
+          });
+/**************************************************************************************************/
+/*******************************ADICIONA LAYERS****************************************************/
+  	var features = [];
+  	map.on('load', function(){
+  		$('#filters_date_hour').css("display", "none");
+
+  		map.addLayer({
+  			"id": "heat-points",
+  			"type": "heatmap",
+  			"source": {
+  				"type": "geojson",
+  				"data": {
+  					"type": "FeatureCollection",
+  					"features": features
+  				}
+  			},
+  			'paint': {
+			// Increase the heatmap weight based on frequency and property magnitude
+			'heatmap-weight': {
+      		type: 'exponential',
+		      stops: [
+		        [1, 0],
+		        [62, 1],
+		      ],
+			},		
+			// Increase the heatmap color weight weight by zoom level
+			// heatmap-intensity is a multiplier on top of heatmap-weight
+			'heatmap-intensity': [
+			'interpolate',
+			['linear'],
+			['zoom'],
+			0,
+			1,
+			9,
+			3
+			],
+			// Color ramp for heatmap.  Domain is 0 (low) to 1 (high).
+			// Begin color ramp at 0-stop with a 0-transparancy color
+			// to create a blur-like effect.
+			'heatmap-color': [
+			'interpolate',
+			['linear'],
+			['heatmap-density'],
+			0,
+			'rgba(0,0,255,0)',
+			0.1,
+			'rgb(65,105,225)',
+			0.3,
+			'rgb(0,255,255)',
+			0.5,
+			'rgb(191,255,0)',
+			0.7,
+			'rgb(255,255,0)',
+			1,
+			'rgb(255,0,0)'
+			],
+			// Adjust the heatmap radius by zoom level
+			'heatmap-radius': [
+			'interpolate',
+			['linear'],
+			['zoom'],
+			0,
+			2,
+			9,
+			20
+			],
+			// Transition from heatmap to circle layer by zoom level
+		} 
+	}
+	);
+
+  		map.addLayer(
+  		{
+  			"id": "points",
+  			"type": "circle",
+  			"source": {
+  				"type": "geojson",
+  				"data": {
+  					"type": "FeatureCollection",
+  					"features": features
+  				}
+  			},
+  			'paint': {
+			'circle-color': [
+			'interpolate',
+			['linear'],
+			['get', 'mag'],
+			0,
+			'rgba(33,102,172,0)',
+			0.2,
+			'rgb(103,169,207)',
+			0.4,
+			'rgb(209,229,240)',
+			0.6,
+			'rgb(253,219,199)',
+			0.8,
+			'rgb(239,138,98)',
+			1,
+			'rgb(178,24,43)'
+			],
+			
+    		'circle-opacity': {
+      		stops: [
+        	[14, 0],
+        	[15, 1]
+      ]
+    }
+			// Transition from heatmap to circle layer by zoom level
+			// Adjust the heatmap radius by zoom level
+			// Transition from heatmap to circle layer by zoom level
+			// Transition from heatmap to circle layer by zoom level
+		} 
+	}
+	);
+  			db.collection("sintomas").get().then(function(querySnapshot){
+                querySnapshot.forEach(function(doc) {
+                	features.push({
+						"type": "Feature",
+						"geometry": {
+							"type": "Point",
+							"coordinates": [doc.data().longitude_destino, doc.data().latitude_destino]
+						},
+						"properties": {
+							"title": doc.data().servico_atendimento,
+							"hora": doc.data().hora_atendimento,
+							"tipo_servico": doc.data().tipo_servico,
+							"data_direcionamento": doc.data().data_direcionamento,
+							"classe_risco": doc.data().classe_risco,
+							"tempo_espera": doc.data().tempo_espera,
+							"regiao_sintoma": doc.data().regiao_sintoma
+						}
+					});
+                });
+	  			
+    			map.getSource("heat-points").setData({
+					type: 'FeatureCollection',
+					features: features
+				});	
+				map.getSource("points").setData({
+					type: 'FeatureCollection',
+					features: features
+				});			            
+            });
+  	});
+
+	map.on('click', 'points', function (e) {
+		var cont = 0;
+		var nome = e.features[0].properties.title;
+		var coordenadas = e.features[0].geometry.coordinates;
+		var cont_azul = 0, cont_verde = 0, cont_amarelo = 0, cont_laranja = 0, cont_vermelho = 0;
+
+
+		if($('#check_data').is(':checked')){
+			var data = $('#data').val();
+			var hora = parseInt($('#slider').val());
+
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var hora_atendimento = childSnapshot.data().hora_atendimento;
+					var data_cadastrada = childSnapshot.data().data_direcionamento;
+					//var classe_risco = childSnapshot.data().classe_risco
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && hora_atendimento === hora && data_cadastrada === data){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Número de casos: " + cont + "<br>Quantidade de casos por classificação de risco:" 
+					+ "<br>Vermelho: " + cont_vermelho + "<br>Laranja: " + cont_laranja + "<br>Amarelo: " + cont_amarelo 
+					+ "<br>Verde: " + cont_verde + "<br>Azul: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else if($('#check_data').is(':checked') && $('#cabeca').is(':checked')){
+			var data = $('#data').val();
+			var hora = parseInt($('#slider').val());
+			var regiao = $('#cabeca').val();
+
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var hora_atendimento = childSnapshot.data().hora_atendimento;
+					var data_cadastrada = childSnapshot.data().data_direcionamento;
+					var regiao_sintoma = childSnapshot.data().regiao_sintoma
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && hora_atendimento === hora && data_cadastrada === data && regiao_sintoma === regiao){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Number of cases: " + cont + "<br>Number of cases by risk classification:" 
+					+ "<br>Red: " + cont_vermelho + "<br>Orange: " + cont_laranja + "<br>Yellow: " + cont_amarelo 
+					+ "<br>Green: " + cont_verde + "<br>Blue: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else if($('#check_data').is(':checked') && $('#torax').is(':checked')){
+			var data = $('#data').val();
+			var hora = parseInt($('#slider').val());
+			var regiao = $('#torax').val();
+
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var hora_atendimento = childSnapshot.data().hora_atendimento;
+					var data_cadastrada = childSnapshot.data().data_direcionamento;
+					var regiao_sintoma = childSnapshot.data().regiao_sintoma
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && hora_atendimento === hora && data_cadastrada === data && regiao_sintoma === regiao){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Número de casos: " + cont + "<br>Quantidade de casos por classificação de risco:" 
+					+ "<br>Vermelho: " + cont_vermelho + "<br>Laranja: " + cont_laranja + "<br>Amarelo: " + cont_amarelo 
+					+ "<br>Verde: " + cont_verde + "<br>Azul: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else if($('#check_data').is(':checked') && $('#barriga').is(':checked')){
+			var data = $('#data').val();
+			var hora = parseInt($('#slider').val());
+			var regiao = $('#barriga').val();
+
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var hora_atendimento = childSnapshot.data().hora_atendimento;
+					var data_cadastrada = childSnapshot.data().data_direcionamento;
+					var regiao_sintoma = childSnapshot.data().regiao_sintoma
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && hora_atendimento === hora && data_cadastrada === data && regiao_sintoma === regiao){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Número de casos: " + cont + "<br>Quantidade de casos por classificação de risco:" 
+					+ "<br>Vermelho: " + cont_vermelho + "<br>Laranja: " + cont_laranja + "<br>Amarelo: " + cont_amarelo 
+					+ "<br>Verde: " + cont_verde + "<br>Azul: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else if($('#check_data').is(':checked') && $('#costasmembros').is(':checked')){
+			var data = $('#data').val();
+			var hora = parseInt($('#slider').val());
+			var regiao = $('#costasmembros').val();
+
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var hora_atendimento = childSnapshot.data().hora_atendimento;
+					var data_cadastrada = childSnapshot.data().data_direcionamento;
+					var regiao_sintoma = childSnapshot.data().regiao_sintoma
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && hora_atendimento === hora && data_cadastrada === data && regiao_sintoma === regiao){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Número de casos: " + cont + "<br>Quantidade de casos por classificação de risco:" 
+					+ "<br>Vermelho: " + cont_vermelho + "<br>Laranja: " + cont_laranja + "<br>Amarelo: " + cont_amarelo 
+					+ "<br>Verde: " + cont_verde + "<br>Azul: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else if($('#cabeca').is(':checked')){
+			var regiao = $('#cabeca').val();
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var regiao_sintoma = childSnapshot.data().regiao_sintoma
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && regiao_sintoma === regiao){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Número de casos: " + cont + "<br>Quantidade de casos por classificação de risco:" 
+					+ "<br>Vermelho: " + cont_vermelho + "<br>Laranja: " + cont_laranja + "<br>Amarelo: " + cont_amarelo 
+					+ "<br>Verde: " + cont_verde + "<br>Azul: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else if($('#torax').is(':checked')){
+			var regiao = $('#torax').val();
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var regiao_sintoma = childSnapshot.data().regiao_sintoma
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && regiao_sintoma === regiao){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Número de casos: " + cont + "<br>Quantidade de casos por classificação de risco:" 
+					+ "<br>Vermelho: " + cont_vermelho + "<br>Laranja: " + cont_laranja + "<br>Amarelo: " + cont_amarelo 
+					+ "<br>Verde: " + cont_verde + "<br>Azul: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else if($('#barriga').is(':checked')){
+			var regiao = $('#barriga').val();
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var regiao_sintoma = childSnapshot.data().regiao_sintoma
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && regiao_sintoma === regiao){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Número de casos: " + cont + "<br>Quantidade de casos por classificação de risco:" 
+					+ "<br>Vermelho: " + cont_vermelho + "<br>Laranja: " + cont_laranja + "<br>Amarelo: " + cont_amarelo 
+					+ "<br>Verde: " + cont_verde + "<br>Azul: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else if($('#costasmembros').is(':checked')){
+			var regiao = $('#costasmembros').val();
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					var regiao_sintoma = childSnapshot.data().regiao_sintoma
+
+					const expr = childSnapshot.data().classe_risco;
+					  	
+					if(servico === nome && regiao_sintoma === regiao){
+						cont = cont + 1;
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Número de casos: " + cont + "<br>Quantidade de casos por classificação de risco:" 
+					+ "<br>Vermelho: " + cont_vermelho + "<br>Laranja: " + cont_laranja + "<br>Amarelo: " + cont_amarelo 
+					+ "<br>Verde: " + cont_verde + "<br>Azul: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+		else{
+			db.collection("sintomas").get().then(function(snapshot){
+				snapshot.forEach(function(childSnapshot){
+					var servico = childSnapshot.data().servico_atendimento;
+					const expr = childSnapshot.data().classe_risco;
+					
+					if(servico === nome){
+						cont = cont + 1;
+
+						switch (expr) {
+						  case 'Azul':
+						    cont_azul++;
+						    break;
+						  case 'Verde':
+						    cont_verde++;
+						    break;
+						  case 'Amarelo':
+						    cont_amarelo++;
+						    break;
+						  case 'Laranja':
+						    cont_laranja++;
+						    break;
+						  case 'Vermelho':
+						    cont_vermelho++;
+						    break;
+						  default:
+						}			
+					}
+				})
+				new mapboxgl.Popup()
+				.setLngLat(coordenadas)
+				.setHTML("<strong>"+nome+"</strong>" + "<br>Number of cases: " + cont + "<br>Number of cases by risk classification:" 
+					+ "<br>Red: " + cont_vermelho + "<br>Orange: " + cont_laranja + "<br>Yellow: " + cont_amarelo 
+					+ "<br>Green: " + cont_verde + "<br>Blue: " + cont_azul)
+				.addTo(map);	
+			})
+		}
+	});
+
+	//NESSA PARTE TEM Q ALTERAR A QUERY PARA PEGAR JUNTO LOCAL A HORA TAMBÉM, PQ SENÃO FILTRA ERRADO, PEGA TODOS OS DADOS TMJ MEU BOM
+	// map.on('click', 'hour-points', function (e) {
+	// 	var cont = 0;
+	// 	var nome = e.features[0].properties.title;
+	// 	var coordenadas = e.features[0].geometry.coordinates;
+	// 	var hora = e.features[0].properties.hora;
+	// 	var vazio = [];
+
+	// 	db.collection("sintomas").get().then(function(snapshot){
+	// 		snapshot.forEach(function(childSnapshot){
+	// 			var hora_atendimento = childSnapshot.data().hora_atendimento;
+	// 			var servico = childSnapshot.data().servico_atendimento;
+	// 			if(servico === nome){
+	// 				if(hora_atendimento === hora){
+	// 					cont = cont + 1;			
+	// 				}
+	// 			}
+	// 		})
+	// 		new mapboxgl.Popup()
+	// 		.setLngLat(coordenadas)
+	// 		.setHTML(nome + "\n Número de casos: " + cont)
+	// 		.addTo(map);	
+	// 	})
+	// });
+
+
+</script>
+
+</body>
+</html>
